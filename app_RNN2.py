@@ -17,14 +17,14 @@ Original file is located at
 # ============================================================
 # UNIVERSIDAD PONTIFICIA BOLIVARIANA
 # Proyecto Final - Minería de Datos (CRISP-DM)
-# App Streamlit - Despliegue Red Neuronal (versión estable)
+# App Streamlit - Despliegue Red Neuronal
+# Autor: Mario Sergio Gómez Rueda
 # ============================================================
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import pickle
-import json
 from pathlib import Path
 
 # ------------------------------------------------------------
@@ -48,12 +48,19 @@ st.markdown("""
         height: 3em; width: 100%;
     }
     .stButton>button:hover { background-color: #FDB813; color: black; }
+    .autor {
+        text-align: center;
+        color: #004b87;
+        font-weight: bold;
+        font-size: 18px;
+        margin-bottom: 10px;
+    }
     footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
 # ------------------------------------------------------------
-# ENCABEZADO
+# ENCABEZADO PRINCIPAL
 # ------------------------------------------------------------
 col1, col2 = st.columns([1,4])
 with col1:
@@ -62,12 +69,13 @@ with col2:
     st.title("Predicción de Riesgo de Hipertensión Arterial 🩸")
     st.subheader("Proyecto Final - Metodología CRISP-DM")
 
+# Autor destacado en la parte superior
+st.markdown('<p class="autor">Autor: Mario Sergio Gómez Rueda</p>', unsafe_allow_html=True)
+
 st.markdown("---")
 
 # ------------------------------------------------------------
 # CARGA DEL MODELO
-#   Debe existir un pickle llamado 'modelo-class-RNN.pkl'
-#   con la tupla: (modelNN, labelencoder, variables, min_max_scaler)
 # ------------------------------------------------------------
 @st.cache_resource
 def cargar_modelo():
@@ -88,12 +96,12 @@ except Exception as e:
 with st.expander("🧠 Entendimiento del Negocio", expanded=True):
     st.write("""
     Este proyecto estima el **riesgo de hipertensión arterial** utilizando variables clínicas,
-    bioquímicas y antropométricas, siguiendo **CRISP-DM**: entendimiento, preparación,
-    modelamiento, evaluación y despliegue.
+    bioquímicas y antropométricas, siguiendo la metodología **CRISP-DM**, la cual permite
+    abordar el ciclo completo de análisis de datos desde la comprensión del problema hasta su despliegue.
     """)
 
 # ------------------------------------------------------------
-# PREDICCIÓN EN TIEMPO REAL (manteniendo NOMBRES EXACTOS)
+# PREDICCIÓN EN TIEMPO REAL
 # ------------------------------------------------------------
 with st.expander("🚀 Predicción en tiempo real"):
     st.write("Ajusta los valores y ejecuta la predicción.")
@@ -124,7 +132,7 @@ with st.expander("🚀 Predicción en tiempo real"):
     tension_arterial = c14.slider('tension_arterial', 60.0, 200.0, 120.0, 1.0)
     actividad_total = c15.slider('actividad_total', 900.0, 7000.0, 1500.0, 10.0)
 
-    # Vector de entrada con NOMBRES y ORDEN como en el notebook
+    # Vector de entrada
     datos = [[
         edad, concentracion_hemoglobina, valor_colesterol_ldl, resultado_glucosa,
         valor_insulina, valor_trigliceridos, valor_folato, valor_homocisteina,
@@ -139,7 +147,7 @@ with st.expander("🚀 Predicción en tiempo real"):
         'circunferencia_de_la_pantorrilla','tension_arterial','actividad_total'
     ])
 
-    # Escalado si aplica (usar exactamente 'variables' del pickle)
+    # Escalado
     try:
         if min_max_scaler is not None:
             data_preparada = pd.DataFrame(
@@ -161,15 +169,6 @@ with st.expander("🚀 Predicción en tiempo real"):
                 st.error(f"⚠️ Error al predecir con el modelo: {e}")
                 st.stop()
 
-            # Probabilidad (si el modelo lo soporta)
-            prob = None
-            try:
-                proba = modelNN.predict_proba(data_preparada)
-                if proba is not None and proba.shape[1] > 1:
-                    prob = float(proba[0, 1])
-            except Exception:
-                prob = None
-
             # Decodificar si hay labelencoder
             try:
                 pred_legible = labelencoder.inverse_transform(Y_fut)
@@ -178,43 +177,19 @@ with st.expander("🚀 Predicción en tiempo real"):
                 data['Predicción'] = Y_fut
 
         # Mapeo requerido: 0 = Riesgo Bajo, 1 = Riesgo Alto
-        etiqueta_simple = "0 = Riesgo Bajo" if int(Y_fut[0]) == 0 else "1 = Riesgo Alto"
+        resultado = "0 = Riesgo Bajo" if int(Y_fut[0]) == 0 else "1 = Riesgo Alto"
 
         st.success("✅ Predicción completada")
         if int(Y_fut[0]) == 1:
-            if prob is not None:
-                st.error(f"🩺 Resultado: **{etiqueta_simple}** · Probabilidad: **{prob:.2%}**")
-            else:
-                st.error(f"🩺 Resultado: **{etiqueta_simple}**")
+            st.error(f"🩺 Resultado: **{resultado}**")
         else:
-            if prob is not None:
-                st.info(f"✅ Resultado: **{etiqueta_simple}** · Probabilidad: **{prob:.2%}**")
-            else:
-                st.info(f"✅ Resultado: **{etiqueta_simple}**")
+            st.info(f"✅ Resultado: **{resultado}**")
 
         st.markdown("**Detalle de la predicción (entrada + salida):**")
         st.dataframe(data, use_container_width=True)
 
 # ------------------------------------------------------------
-# MÉTRICAS DEL MODELO (opcional si existe metricas.json)
-# ------------------------------------------------------------
-with st.expander("📊 Métricas del Modelo"):
-    mpath = Path("metricas.json")
-    if mpath.exists():
-        try:
-            metricas = json.loads(mpath.read_text(encoding="utf-8"))
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Exactitud", f"{metricas.get('exactitud', 0):.2f}")
-            c2.metric("Precisión", f"{metricas.get('precision', 0):.2f}")
-            c3.metric("Recall", f"{metricas.get('recall', 0):.2f}")
-            c4.metric("Área ROC", f"{metricas.get('roc', 0):.2f}")
-        except Exception as e:
-            st.warning(f"No se pudo leer 'metricas.json': {e}")
-    else:
-        st.info("Puedes agregar un archivo 'metricas.json' con {exactitud, precision, recall, roc} para mostrar las métricas.")
-
-# ------------------------------------------------------------
-# BIBLIOGRAFÍA
+# BIBLIOGRAFÍA Y FIRMA
 # ------------------------------------------------------------
 with st.expander("📚 Referencias y Bibliografía"):
     st.markdown("""
@@ -224,6 +199,10 @@ with st.expander("📚 Referencias y Bibliografía"):
 - Félix Jiménez, A. F. (s. f.). *Hipertensión Arterial Mexico Data Set* [Conjunto de datos]. Kaggle.
   Recuperado el 8 de noviembre de 2025, de https://www.kaggle.com/datasets/frederickfelix/hipertensin-arterial-mxico
 """)
+
+# Pie de autor
+st.markdown("---")
+st.markdown("**Autor:** Mario Sergio Gómez Rueda — Universidad Pontificia Bolivariana (2025)**")
 
 """# **Predicciones**
 La calidad del modelo es:
