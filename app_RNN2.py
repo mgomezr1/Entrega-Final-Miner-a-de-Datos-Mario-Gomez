@@ -17,7 +17,7 @@ Original file is located at
 # ============================================================
 # UNIVERSIDAD PONTIFICIA BOLIVARIANA
 # Proyecto Final - Minería de Datos (CRISP-DM)
-# App Streamlit - Despliegue Red Neuronal (Versión final)
+# App Streamlit - Despliegue Red Neuronal (versión estable)
 # ============================================================
 
 import streamlit as st
@@ -66,6 +66,8 @@ st.markdown("---")
 
 # ------------------------------------------------------------
 # CARGA DEL MODELO
+#   Debe existir un pickle llamado 'modelo-class-RNN.pkl'
+#   con la tupla: (modelNN, labelencoder, variables, min_max_scaler)
 # ------------------------------------------------------------
 @st.cache_resource
 def cargar_modelo():
@@ -77,7 +79,7 @@ def cargar_modelo():
 try:
     modelNN, labelencoder, variables, min_max_scaler = cargar_modelo()
 except Exception as e:
-    st.error(f"⚠️ No se pudo cargar el modelo: {e}")
+    st.error(f"⚠️ No se pudo cargar el modelo 'modelo-class-RNN.pkl': {e}")
     st.stop()
 
 # ------------------------------------------------------------
@@ -85,20 +87,143 @@ except Exception as e:
 # ------------------------------------------------------------
 with st.expander("🧠 Entendimiento del Negocio", expanded=True):
     st.write("""
-    Este proyecto busca estimar el **riesgo de hipertensión arterial** a partir de variables
-    clínicas, bioquímicas y antropométricas, siguiendo la metodología **CRISP-DM**.
+    Este proyecto estima el **riesgo de hipertensión arterial** utilizando variables clínicas,
+    bioquímicas y antropométricas, siguiendo **CRISP-DM**: entendimiento, preparación,
+    modelamiento, evaluación y despliegue.
     """)
 
 # ------------------------------------------------------------
-# PREDICCIÓN EN TIEMPO REAL
+# PREDICCIÓN EN TIEMPO REAL (manteniendo NOMBRES EXACTOS)
 # ------------------------------------------------------------
 with st.expander("🚀 Predicción en tiempo real"):
     st.write("Ajusta los valores y ejecuta la predicción.")
 
+    # Sliders con nombres EXACTOS
     c1, c2, c3 = st.columns(3)
     edad = c1.slider('edad', 9, 90, 30, 1)
     concentracion_hemoglobina = c2.slider('concentracion_hemoglobina', 8.0, 18.0, 13.5, 0.1)
-    valor_colesterol_ldl = c3.slider('valor_colesterol_ldl', 2
+    valor_colesterol_ldl = c3.slider('valor_colesterol_ldl', 20.0, 300.0, 120.0, 1.0)
+
+    c4, c5, c6 = st.columns(3)
+    resultado_glucosa = c4.slider('resultado_glucosa', 50.0, 300.0, 100.0, 1.0)
+    valor_insulina = c5.slider('valor_insulina', 1.0, 100.0, 15.0, 0.5)
+    valor_trigliceridos = c6.slider('valor_trigliceridos', 30.0, 800.0, 150.0, 1.0)
+
+    c7, c8, c9 = st.columns(3)
+    valor_folato = c7.slider('valor_folato', 2.0, 50.0, 10.0, 0.1)
+    valor_homocisteina = c8.slider('valor_homocisteina', 3.0, 30.0, 10.0, 0.1)
+    valor_vitamina_bdoce = c9.slider('valor_vitamina_bdoce', 60.0, 500.0, 220.0, 1.0)
+
+    c10, c11, c12 = st.columns(3)
+    valor_vitamina_d = c10.slider('valor_vitamina_d', 10.0, 100.0, 30.0, 1.0)
+    estatura = c11.slider('estatura', 120.0, 210.0, 170.0, 0.5)
+    distancia_rodilla_talon = c12.slider('distancia_rodilla_talon', 30.0, 70.0, 50.0, 0.5)
+
+    c13, c14, c15 = st.columns(3)
+    circunferencia_de_la_pantorrilla = c13.slider('circunferencia_de_la_pantorrilla', 20.0, 50.0, 35.0, 0.5)
+    tension_arterial = c14.slider('tension_arterial', 60.0, 200.0, 120.0, 1.0)
+    actividad_total = c15.slider('actividad_total', 900.0, 7000.0, 1500.0, 10.0)
+
+    # Vector de entrada con NOMBRES y ORDEN como en el notebook
+    datos = [[
+        edad, concentracion_hemoglobina, valor_colesterol_ldl, resultado_glucosa,
+        valor_insulina, valor_trigliceridos, valor_folato, valor_homocisteina,
+        valor_vitamina_bdoce, valor_vitamina_d, estatura, distancia_rodilla_talon,
+        circunferencia_de_la_pantorrilla, tension_arterial, actividad_total
+    ]]
+
+    data = pd.DataFrame(datos, columns=[
+        'edad','concentracion_hemoglobina','valor_colesterol_ldl','resultado_glucosa',
+        'valor_insulina','valor_trigliceridos','valor_folato','valor_homocisteina',
+        'valor_vitamina_bdoce','valor_vitamina_d','estatura','distancia_rodilla_talon',
+        'circunferencia_de_la_pantorrilla','tension_arterial','actividad_total'
+    ])
+
+    # Escalado si aplica (usar exactamente 'variables' del pickle)
+    try:
+        if min_max_scaler is not None:
+            data_preparada = pd.DataFrame(
+                min_max_scaler.transform(data[variables]),
+                columns=variables
+            )
+        else:
+            data_preparada = data[variables].copy()
+    except Exception as e:
+        st.error(f"⚠️ Error preparando datos con el scaler/variables: {e}")
+        st.stop()
+
+    # Botón de predicción
+    if st.button("🔍 Ejecutar Predicción"):
+        with st.spinner("Ejecutando el modelo..."):
+            try:
+                Y_fut = modelNN.predict(data_preparada)
+            except Exception as e:
+                st.error(f"⚠️ Error al predecir con el modelo: {e}")
+                st.stop()
+
+            # Probabilidad (si el modelo lo soporta)
+            prob = None
+            try:
+                proba = modelNN.predict_proba(data_preparada)
+                if proba is not None and proba.shape[1] > 1:
+                    prob = float(proba[0, 1])
+            except Exception:
+                prob = None
+
+            # Decodificar si hay labelencoder
+            try:
+                pred_legible = labelencoder.inverse_transform(Y_fut)
+                data['Predicción'] = pred_legible
+            except Exception:
+                data['Predicción'] = Y_fut
+
+        # Mapeo requerido: 0 = Riesgo Bajo, 1 = Riesgo Alto
+        etiqueta_simple = "0 = Riesgo Bajo" if int(Y_fut[0]) == 0 else "1 = Riesgo Alto"
+
+        st.success("✅ Predicción completada")
+        if int(Y_fut[0]) == 1:
+            if prob is not None:
+                st.error(f"🩺 Resultado: **{etiqueta_simple}** · Probabilidad: **{prob:.2%}**")
+            else:
+                st.error(f"🩺 Resultado: **{etiqueta_simple}**")
+        else:
+            if prob is not None:
+                st.info(f"✅ Resultado: **{etiqueta_simple}** · Probabilidad: **{prob:.2%}**")
+            else:
+                st.info(f"✅ Resultado: **{etiqueta_simple}**")
+
+        st.markdown("**Detalle de la predicción (entrada + salida):**")
+        st.dataframe(data, use_container_width=True)
+
+# ------------------------------------------------------------
+# MÉTRICAS DEL MODELO (opcional si existe metricas.json)
+# ------------------------------------------------------------
+with st.expander("📊 Métricas del Modelo"):
+    mpath = Path("metricas.json")
+    if mpath.exists():
+        try:
+            metricas = json.loads(mpath.read_text(encoding="utf-8"))
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Exactitud", f"{metricas.get('exactitud', 0):.2f}")
+            c2.metric("Precisión", f"{metricas.get('precision', 0):.2f}")
+            c3.metric("Recall", f"{metricas.get('recall', 0):.2f}")
+            c4.metric("Área ROC", f"{metricas.get('roc', 0):.2f}")
+        except Exception as e:
+            st.warning(f"No se pudo leer 'metricas.json': {e}")
+    else:
+        st.info("Puedes agregar un archivo 'metricas.json' con {exactitud, precision, recall, roc} para mostrar las métricas.")
+
+# ------------------------------------------------------------
+# BIBLIOGRAFÍA
+# ------------------------------------------------------------
+with st.expander("📚 Referencias y Bibliografía"):
+    st.markdown("""
+- Oviedo, A. I. (2025). *Minería de Datos en Python*. Universidad Pontificia Bolivariana.
+- Oviedo, A. I. (2025). *Minería Predictiva*. Universidad Pontificia Bolivariana.
+- Oviedo, A. I. (2025). *Minería Descriptiva*. Universidad Pontificia Bolivariana.
+- Félix Jiménez, A. F. (s. f.). *Hipertensión Arterial Mexico Data Set* [Conjunto de datos]. Kaggle.
+  Recuperado el 8 de noviembre de 2025, de https://www.kaggle.com/datasets/frederickfelix/hipertensin-arterial-mxico
+""")
 
 """# **Predicciones**
 La calidad del modelo es:
